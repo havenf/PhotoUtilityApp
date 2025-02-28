@@ -5,15 +5,15 @@ import PhotosUI
 struct UpdateEditPhotoView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+
+    // When editing an existing photo, pass its value; for a new photo, pass nil.
+    let photo: Photo?
     
     @State private var name: String = ""
     @State private var imageData: Data? = nil
     @State private var imageSelection: PhotosPickerItem? = nil
     @State private var showCamera: Bool = false
     @State private var cameraError: CameraPermission.CameraError?
-
-    // When editing an existing photo, pass its value; for a new photo, pass nil.
-    let photo: Photo?
     
     var body: some View {
         NavigationStack {
@@ -31,7 +31,7 @@ struct UpdateEditPhotoView: View {
                             .resizable()
                             .scaledToFit()
                     }
-                    // Separate button for taking a photo via the camera.
+                    // Button for taking a photo via the camera.
                     Button("Take Photo") {
                         if let error = CameraPermission.checkPermissions() {
                             cameraError = error
@@ -45,11 +45,26 @@ struct UpdateEditPhotoView: View {
                             imageData = image.jpegData(compressionQuality: 0.8)
                         })
                     }
-                    // Separate PhotosPicker for choosing an image from the library.
-                    PhotosPicker(selection: $imageSelection) {
+                    // PhotosPicker for choosing an image from the library.
+                    PhotosPicker(
+                        selection: $imageSelection,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
                         Label("Choose from Library", systemImage: "photo.on.rectangle")
                     }
                     .padding(.vertical, 8)
+                    // Use the zero-parameter onChange.
+                    .onChange(of: imageSelection) {
+                        Task {
+                            guard let item = imageSelection else { return }
+                            if let data = try? await item.loadTransferable(type: Data.self) {
+                                await MainActor.run {
+                                    imageData = data
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle(photo == nil ? "Add Photo" : "Edit Photo")
@@ -60,15 +75,6 @@ struct UpdateEditPhotoView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { savePhoto() }
                         .disabled(name.isEmpty)
-                }
-            }
-            // When the selection changes, delegate to the controller.
-            .onChange(of: imageSelection) { newSelection, _ in
-                guard let item = newSelection else { return }
-                Task {
-                    if let data = await ImageTransferController.loadImageData(from: item) {
-                        imageData = data
-                    }
                 }
             }
             .alert(isPresented: .constant(cameraError != nil)) {
@@ -95,4 +101,9 @@ struct UpdateEditPhotoView: View {
         }
         dismiss()
     }
+}
+
+#Preview {
+    UpdateEditPhotoView(photo: nil)
+        .modelContainer(for: Photo.self, inMemory: true)
 }
