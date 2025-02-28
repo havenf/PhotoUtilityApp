@@ -15,8 +15,6 @@ struct UpdateEditPhotoView: View {
     // When editing an existing photo, pass its value; for a new photo, pass nil.
     let photo: Photo?
     
-    
-
     var body: some View {
         NavigationStack {
             Form {
